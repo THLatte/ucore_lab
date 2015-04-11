@@ -347,7 +347,7 @@ do_pgfault(struct mm_struct *mm, uint32_t error_code, uintptr_t addr) {
     ret = -E_NO_MEM;
 
     pte_t *ptep=NULL;
-    /*LAB3 EXERCISE 1: YOUR CODE
+    /*LAB3 EXERCISE 1: 2012011275
     * Maybe you want help comment, BELOW comments can help you finish the code
     *
     * Some Useful MACROs and DEFINEs, you can use them in below implementation.
@@ -373,13 +373,13 @@ do_pgfault(struct mm_struct *mm, uint32_t error_code, uintptr_t addr) {
     }
     else {
     /*LAB3 EXERCISE 2: YOUR CODE
-    * Now we think this pte is a  swap entry, we should load data from disk to a page with phy addr,
+    * Now we think this pte is a swap entry, we should load data from disk to a page with phy addr,
     * and map the phy addr with logical addr, trigger swap manager to record the access situation of this page.
     *
     *  Some Useful MACROs and DEFINEs, you can use them in below implementation.
     *  MACROs or Functions:
     *    swap_in(mm, addr, &page) : alloc a memory page, then according to the swap entry in PTE for addr,
-    *                               find the addr of disk page, read the content of disk page into this memroy page
+    *                               find the addr of disk page, read the content of disk page into this memory page
     *    page_insert ： build the map of phy addr of an Page with the linear addr la
     *    swap_map_swappable ： set the page swappable
     */
@@ -396,6 +396,41 @@ do_pgfault(struct mm_struct *mm, uint32_t error_code, uintptr_t addr) {
         }
    }
 #endif
+   ptep = get_pte(mm->pgdir, addr, 1);
+   if(ptep == NULL)
+   {
+	   cprintf("get_pte error in do_pgfault with NULL returned.\n");
+	   goto failed;
+   }
+
+   if(*ptep == 0)
+   {
+	   if(pgdir_alloc_page(mm->pgdir, addr, perm) == NULL)
+	   {
+		   cprintf("pgdir_alloc_page error in do_pgfault with NULL returned.\n");
+		   goto failed;
+	   }
+   }
+   else
+   {
+	   if(swap_init_ok)
+	   {
+	       struct Page *page=NULL;
+	       //swap_in(mm, addr, page);                  //最初写的版本
+	       if((ret = swap_in(mm, addr, &page)) != 0)   //最初写的时候没有注意参数类型导致出错，更改后对比答案加入此判断条件
+	       {
+	    	   cprintf("swap_in error in do_pgfault with 0 not returned.\n");
+	    	   goto failed;
+	       }
+	       page_insert(mm->pgdir, page, addr, perm);
+	       swap_map_swappable(mm, addr, page, 1);
+	   }
+	   else
+	   {
+		   cprintf("no swap_init_ok but ptep is %x, failed\n",*ptep);
+		   goto failed;
+	   }
+   }
    ret = 0;
 failed:
     return ret;
