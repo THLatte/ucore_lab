@@ -1,0 +1,56 @@
+LAB6 SPOC: proc 1 enqueued.
+ide 0:      10000(sectors), 'QEMU HARDDISK'.
+ide 1:     262144(sectors), 'QEMU HARDDISK'.
+++ setup timer interrupts
+LAB6 SPOC: in cpu_idle, idleproc chooses a ready proc and schedules.
+LAB6 SPOC: proc 1 dequeued.
+LAB6 SPOC: start to switch from proc0 to proc1.
+LAB6 SPOC: proc 2 enqueued.
+LAB6 SPOC: in do_wait, proc 0 is waiting child, needing resched.
+LAB6 SPOC: proc 2 dequeued.
+LAB6 SPOC: start to switch from proc1 to proc2.
+kernel_execve: pid = 2, name = "exit".
+I am the parent. Forking the child...
+LAB6 SPOC: proc 3 enqueued.
+I am parent, fork a child pid 3
+I am the parent, waiting now..
+LAB6 SPOC: in do_wait, proc -1342177384 is waiting child, needing resched.
+LAB6 SPOC: proc 3 dequeued.
+LAB6 SPOC: start to switch from proc2 to proc3.
+I am the child.
+LAB6 SPOC: proc 0 needs rescheduling.
+LAB6 SPOC: proc 3 enqueued.
+LAB6 SPOC: proc 3 dequeued.
+LAB6 SPOC: proc 0 needs rescheduling.
+LAB6 SPOC: proc 3 enqueued.
+LAB6 SPOC: proc 3 dequeued.
+LAB6 SPOC: proc 0 needs rescheduling.
+LAB6 SPOC: proc 3 enqueued.
+LAB6 SPOC: proc 3 dequeued.
+LAB6 SPOC: proc 0 needs rescheduling.
+LAB6 SPOC: proc 3 enqueued.
+LAB6 SPOC: proc 3 dequeued.
+LAB6 SPOC: proc 0 needs rescheduling.
+LAB6 SPOC: proc 3 enqueued.
+LAB6 SPOC: proc 3 dequeued.
+LAB6 SPOC: proc 0 needs rescheduling.
+LAB6 SPOC: proc 3 enqueued.
+LAB6 SPOC: proc 3 dequeued.
+LAB6 SPOC: proc 0 needs rescheduling.
+LAB6 SPOC: proc 3 enqueued.
+LAB6 SPOC: proc 3 dequeued.
+LAB6 SPOC: proc 2 enqueued.
+LAB6 SPOC: proc 2 dequeued.
+LAB6 SPOC: start to switch from proc3 to proc2.
+LAB6 SPOC: switch completed, current pid = 2.
+waitpid 3 ok.
+exit pass.
+LAB6 SPOC: proc 1 enqueued.
+LAB6 SPOC: proc 1 dequeued.
+LAB6 SPOC: start to switch from proc2 to proc1.
+LAB6 SPOC: switch completed, current pid = 1.
+LAB6 SPOC: schedules in init main.
+LAB6 SPOC: proc 1 enqueued.
+LAB6 SPOC: proc 1 dequeued.
+all user-mode processes have quit.
+init check memory pass.

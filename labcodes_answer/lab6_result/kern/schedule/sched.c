@@ -65,6 +65,7 @@ wakeup_proc(struct proc_struct *proc) {
             proc->state = PROC_RUNNABLE;
             proc->wait_state = 0;
             if (proc != current) {
+                //cprintf("LAB6 SPOC: wakeup proc %d and enqueue.\n", proc->pid);
                 sched_class_enqueue(proc);
             }
         }
@@ -89,11 +90,14 @@ schedule(void) {
             sched_class_dequeue(next);
         }
         if (next == NULL) {
+            cprintf("LAB6 SPOC: no more proc, IDLEPROC choosed.\n");
             next = idleproc;
         }
         next->runs ++;
         if (next != current) {
+            cprintf("LAB6 SPOC: start to switch from proc%d to proc%d.\n", current->pid, next->pid);
             proc_run(next);
+            cprintf("LAB6 SPOC: switch completed, current pid = %d.\n", current->pid);
         }
     }
     local_intr_restore(intr_flag);
