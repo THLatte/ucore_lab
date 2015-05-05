@@ -49,8 +49,9 @@ _fifo_map_swappable(struct mm_struct *mm, uintptr_t addr, struct Page *page, int
  
     assert(entry != NULL && head != NULL);
     //record the page access situlation
-    /*LAB3 EXERCISE 2: YOUR CODE*/ 
-    //(1)link the most recent arrival page at the back of the pra_list_head qeueue.
+    /*LAB3 EXERCISE 2: 2012011275*/
+    //(1)link the most recent arrival page at the back of the pra_list_head queue.
+    list_add(head, entry);
     return 0;
 }
 /*
@@ -64,9 +65,15 @@ _fifo_swap_out_victim(struct mm_struct *mm, struct Page ** ptr_page, int in_tick
          assert(head != NULL);
      assert(in_tick==0);
      /* Select the victim */
-     /*LAB3 EXERCISE 2: YOUR CODE*/ 
-     //(1)  unlink the  earliest arrival page in front of pra_list_head qeueue
+     /*LAB3 EXERCISE 2: 2012011275*/
+     //(1)  unlink the earliest arrival page in front of pra_list_head queue
      //(2)  set the addr of addr of this page to ptr_page
+     list_entry_t *unlinked_entry = head->prev;
+     assert(unlinked_entry != head);       //参考答案后加入此句
+     struct Page *unlinked_page = le2page(unlinked_entry, pra_page_link);
+     list_del(unlinked_entry);
+     assert(unlinked_page != NULL);        //参考答案后加入此句
+     *ptr_page = unlinked_page;
      return 0;
 }
 
