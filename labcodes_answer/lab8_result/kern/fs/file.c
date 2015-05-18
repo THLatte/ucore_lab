@@ -211,26 +211,35 @@ file_close(int fd) {
 // read file
 int
 file_read(int fd, void *base, size_t len, size_t *copied_store) {
+    cprintf("LAB8 SPOC: file_read start.\n");
     int ret;
     struct file *file;
     *copied_store = 0;
     if ((ret = fd2file(fd, &file)) != 0) {
+        cprintf("   LAB8 SPOC: File not open.\n");
         return ret;
     }
     if (!file->readable) {
+        cprintf("   LAB8 SPOC: File is unreadable.\n");
         return -E_INVAL;
     }
     fd_array_acquire(file);
+    cprintf("   LAB8 SPOC: File acquired.\n");
 
     struct iobuf __iob, *iob = iobuf_init(&__iob, base, len, file->pos);
+
+    cprintf("   LAB8 SPOC: before vop_read.\n");
     ret = vop_read(file->node, iob);
+    cprintf("   LAB8 SPOC: after vop_read.\n");
 
     size_t copied = iobuf_used(iob);
     if (file->status == FD_OPENED) {
+        cprintf("   LAB8 SPOC: Move file pointer.\n");
         file->pos += copied;
     }
     *copied_store = copied;
     fd_array_release(file);
+    cprintf("   LAB8 SPOC: file released.\n");
     return ret;
 }
 
