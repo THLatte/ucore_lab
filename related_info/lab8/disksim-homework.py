@@ -475,7 +475,7 @@ class Disk:
             angleOffset    = self.blockAngleOffset[track]
             angleAtArrival = (Decimal(self.angle) + (seekEst * self.rotateSpeed))
             while angleAtArrival > 360.0:
-                angleAtArrival -= 360.0
+                angleAtArrival -= Decimal(360.0)
             rotDist        = Decimal((angle - angleOffset) - angleAtArrival)
             while rotDist > 360.0:
                 rotDist -= Decimal(360.0)
