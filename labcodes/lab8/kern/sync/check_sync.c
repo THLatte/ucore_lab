@@ -121,9 +121,16 @@ void phi_test_condvar (i) {
 void phi_take_forks_condvar(int i) {
      down(&(mtp->mutex));
 //--------into routine in monitor--------------
-     // LAB7 EXERCISE1: YOUR CODE
+     // LAB7 EXERCISE1: 2012011275
      // I am hungry
      // try to get fork
+     state_condvar[i] = HUNGRY;
+     phi_test_condvar(i);
+     while(state_condvar[i] != EATING)
+     {
+        cprintf("phi_take_forks_condvar: %d didn't get fork and will wait\n",i); //参照答案补充了这一句输出。
+        cond_wait(&mtp->cv[i]);
+     }
 //--------leave routine in monitor--------------
       if(mtp->next_count>0)
          up(&(mtp->next));
@@ -135,9 +142,15 @@ void phi_put_forks_condvar(int i) {
      down(&(mtp->mutex));
 
 //--------into routine in monitor--------------
-     // LAB7 EXERCISE1: YOUR CODE
+     // LAB7 EXERCISE1: 2012011275
      // I ate over
      // test left and right neighbors
+     state_condvar[i] = THINKING;
+     /*phi_test_condvar((i + 1)%5);
+     phi_test_condvar((i + 4)%5);
+     原本按上面的写的，是根据伪代码来的，但参照答案发现用宏代替了，这样程序更稳定，于是在下面做替换*/
+     phi_test_condvar(LEFT);
+     phi_test_condvar(RIGHT);
 //--------leave routine in monitor--------------
      if(mtp->next_count>0)
         up(&(mtp->next));

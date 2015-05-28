@@ -26,20 +26,20 @@ manage all these details efficiently. In ucore, a thread is just a special kind 
 process state       :     meaning               -- reason
     PROC_UNINIT     :   uninitialized           -- alloc_proc
     PROC_SLEEPING   :   sleeping                -- try_free_pages, do_wait, do_sleep
-    PROC_RUNNABLE   :   runnable(maybe running) -- proc_init, wakeup_proc, 
+    PROC_RUNNABLE   :   runnable(maybe running) -- proc_init, wakeup_proc,
     PROC_ZOMBIE     :   almost dead             -- do_exit
 
 -----------------------------
 process state changing:
-                                            
+
   alloc_proc                                 RUNNING
       +                                   +--<----<--+
       +                                   + proc_run +
-      V                                   +-->---->--+ 
+      V                                   +-->---->--+
 PROC_UNINIT -- proc_init/wakeup_proc --> PROC_RUNNABLE -- try_free_pages/do_wait/do_sleep --> PROC_SLEEPING --
                                            A      +                                                           +
                                            |      +--- do_exit --> PROC_ZOMBIE                                +
-                                           +                                                                  + 
+                                           +                                                                  +
                                            -----------------------wakeup_proc----------------------------------
 -----------------------------
 process relations
@@ -55,9 +55,9 @@ SYS_wait        : wait process                            -->do_wait
 SYS_exec        : after fork, process execute a program   -->load a program and refresh the mm
 SYS_clone       : create child thread                     -->do_fork-->wakeup_proc
 SYS_yield       : process flag itself need resecheduling, -- proc->need_sched=1, then scheduler will rescheule this process
-SYS_sleep       : process sleep                           -->do_sleep 
+SYS_sleep       : process sleep                           -->do_sleep
 SYS_kill        : kill process                            -->do_kill-->proc->flags |= PF_EXITING
-                                                                 -->wakeup_proc-->do_wait-->do_exit   
+                                                                 -->wakeup_proc-->do_wait-->do_exit
 SYS_getpid      : get the process's pid
 
 */
@@ -90,7 +90,7 @@ static struct proc_struct *
 alloc_proc(void) {
     struct proc_struct *proc = kmalloc(sizeof(struct proc_struct));
     if (proc != NULL) {
-    //LAB4:EXERCISE1 YOUR CODE
+    //LAB4:EXERCISE1 2012011275
     /*
      * below fields in proc_struct need to be initialized
      *       enum proc_state state;                      // Process state
@@ -106,13 +106,27 @@ alloc_proc(void) {
      *       uint32_t flags;                             // Process flag
      *       char name[PROC_NAME_LEN + 1];               // Process name
      */
-     //LAB5 YOUR CODE : (update LAB4 steps)
+     proc->state = PROC_UNINIT;
+     proc->pid = -1;
+     proc->runs = 0;
+     proc->kstack = 0;
+     proc->need_resched = 0;
+     proc->parent = NULL;
+     proc->mm = NULL;
+     memset(&(proc->context), 0, sizeof(struct context));
+     proc->tf = NULL;
+     proc->cr3 = boot_cr3;
+     proc->flags = 0;
+     memset(proc->name, 0, PROC_NAME_LEN);
+     //LAB5 2012011275 : (update LAB4 steps)
     /*
-     * below fields(add in LAB5) in proc_struct need to be initialized	
+     * below fields(add in LAB5) in proc_struct need to be initialized
      *       uint32_t wait_state;                        // waiting state
      *       struct proc_struct *cptr, *yptr, *optr;     // relations between processes
 	 */
-     //LAB6 YOUR CODE : (update LAB5 steps)
+     proc->wait_state = 0;
+     proc->cptr = proc->yptr = proc->optr = NULL;
+     //LAB6 2012011275 : (update LAB5 steps)
     /*
      * below fields(add in LAB6) in proc_struct need to be initialized
      *     struct run_queue *rq;                       // running queue contains Process
@@ -122,7 +136,14 @@ alloc_proc(void) {
      *     uint32_t lab6_stride;                       // FOR LAB6 ONLY: the current stride of the process
      *     uint32_t lab6_priority;                     // FOR LAB6 ONLY: the priority of process, set by lab6_set_priority(uint32_t)
      */
-    //LAB8:EXERCISE2 YOUR CODE HINT:need add some code to init fs in proc_struct, ...
+     proc->rq = NULL;
+     proc->run_link.prev = proc->run_link.next = NULL;
+     proc->time_slice = 0;
+     proc->lab6_run_pool.left = proc->lab6_run_pool.right = proc->lab6_run_pool.parent = NULL;
+     proc->lab6_stride = 0;
+     proc->lab6_priority = 0;
+    //LAB8:EXERCISE2 2012011275 HINT:need add some code to init fs in proc_struct, ...
+     proc->filesp = NULL;
     }
     return proc;
 }
@@ -259,7 +280,7 @@ find_proc(int pid) {
 }
 
 // kernel_thread - create a kernel thread using "fn" function
-// NOTE: the contents of temp trapframe tf will be copied to 
+// NOTE: the contents of temp trapframe tf will be copied to
 //       proc->tf in do_fork-->copy_thread function
 int
 kernel_thread(int (*fn)(void *), void *arg, uint32_t clone_flags) {
@@ -427,8 +448,8 @@ do_fork(uint32_t clone_flags, uintptr_t stack, struct trapframe *tf) {
         goto fork_out;
     }
     ret = -E_NO_MEM;
-    //LAB4:EXERCISE2 YOUR CODE
-    //LAB8:EXERCISE2 YOUR CODE  HINT:how to copy the fs in parent's proc_struct?
+    //LAB4:EXERCISE2 2012011275
+    //LAB8:EXERCISE2 2012011275  HINT:how to copy the fs in parent's proc_struct?
     /*
      * Some Useful MACROs, Functions and DEFINEs, you can use them in below implementation.
      * MACROs or Functions:
@@ -453,15 +474,50 @@ do_fork(uint32_t clone_flags, uintptr_t stack, struct trapframe *tf) {
     //    5. insert proc_struct into hash_list && proc_list
     //    6. call wakup_proc to make the new child process RUNNABLE
     //    7. set ret vaule using child proc's pid
+    proc = alloc_proc();
+    if(proc == NULL)
+    {
+        goto fork_out;
+    }
+    proc->parent = current;
+    assert(current->wait_state == 0);
+    if(setup_kstack(proc) != 0)
+    {
+        goto bad_fork_cleanup_proc;
+    }
+    if(copy_mm(clone_flags, proc) != 0)
+    {
+        goto bad_fork_cleanup_kstack;
+    }
+    if(copy_files(clone_flags, proc) != 0)  //lab8
+    {
+        goto bad_fork_cleanup_fs;
+    }
+    copy_thread(proc, stack, tf);
 
-	//LAB5 YOUR CODE : (update LAB4 steps)
+    bool intr_flag;
+    local_intr_save(intr_flag);
+    {
+        proc->pid = get_pid();
+        hash_proc(proc);
+        //因为set_links函数中包含了将proc插入到proc_list的操作和增加进程计数的操作，故将这两个操作删除
+        //list_add(&proc_list, &(proc->list_link));
+        //nr_process ++;
+        set_links(proc);
+        //cprintf("\nNew proc added. Now we have %d processes.\n\n", nr_process);
+    }
+    local_intr_restore(intr_flag);
+
+    wakeup_proc(proc);
+    ret = proc->pid;
+	//LAB5 2012011275 : (update LAB4 steps)
    /* Some Functions
-    *    set_links:  set the relation links of process.  ALSO SEE: remove_links:  lean the relation links of process 
+    *    set_links:  set the relation links of process.  ALSO SEE: remove_links:  lean the relation links of process
     *    -------------------
 	*    update step 1: set child proc's parent to current process, make sure current process's wait_state is 0
 	*    update step 5: insert proc_struct into hash_list && proc_list, set the relation links of process
     */
-	
+
 fork_out:
     return ret;
 
@@ -486,7 +542,7 @@ do_exit(int error_code) {
     if (current == initproc) {
         panic("initproc exit.\n");
     }
-    
+
     struct mm_struct *mm = current->mm;
     if (mm != NULL) {
         lcr3(boot_cr3);
@@ -500,7 +556,7 @@ do_exit(int error_code) {
     put_files(current); //for LAB8
     current->state = PROC_ZOMBIE;
     current->exit_code = error_code;
-    
+
     bool intr_flag;
     struct proc_struct *proc;
     local_intr_save(intr_flag);
@@ -512,7 +568,7 @@ do_exit(int error_code) {
         while (current->cptr != NULL) {
             proc = current->cptr;
             current->cptr = proc->optr;
-    
+
             proc->yptr = NULL;
             if ((proc->optr = initproc->cptr) != NULL) {
                 initproc->cptr->yptr = proc;
@@ -527,7 +583,7 @@ do_exit(int error_code) {
         }
     }
     local_intr_restore(intr_flag);
-    
+
     schedule();
     panic("do_exit will not return!! %d.\n", current->pid);
 }
@@ -546,10 +602,10 @@ load_icode_read(int fd, void *buf, size_t len, off_t offset) {
 }
 
 // load_icode -  called by sys_exec-->do_execve
-  
+
 static int
 load_icode(int fd, int argc, char **kargv) {
-    /* LAB8:EXERCISE2 YOUR CODE  HINT:how to load the file with handler fd  in to process's memory? how to setup argc/argv?
+    /* LAB8:EXERCISE2 2012011275  HINT:how to load the file with handler fd  in to process's memory? how to setup argc/argv?
      * MACROs or Functions:
      *  mm_create        - create a mm
      *  setup_pgdir      - setup pgdir in mm
@@ -573,6 +629,218 @@ load_icode(int fd, int argc, char **kargv) {
      * (7) setup trapframe for user environment
      * (8) if up steps failed, you should cleanup the env.
      */
+    assert(argc >= 0 && argc <= EXEC_MAX_ARG_NUM);
+
+    if (current->mm != NULL)
+    {
+        panic("load_icode: current->mm must be empty.\n");
+    }
+
+    int ret = -E_NO_MEM;
+
+    struct mm_struct *mm;
+    //(1) create a new mm for current process
+    mm = mm_create();
+    if(mm == NULL)
+    {
+        goto bad_mm;
+    }
+    //(2) create a new PDT, and mm->pgdir= kernel virtual addr of PDT
+    if(setup_pgdir(mm) != 0)
+    {
+        goto bad_pgdir_cleanup_mm;
+    }
+
+    struct Page *page;
+    //(3) copy TEXT/DATA/BSS parts in binary to memory space of process
+    //    (3.1) read raw data content in file and resolve elfhdr
+    struct elfhdr __elf, *elf = &__elf;
+    if((ret = load_icode_read(fd, elf, sizeof(struct elfhdr), 0)) != 0)
+    {
+        goto bad_elf_cleanup_pgdir;
+    }
+
+    if(elf->e_magic != ELF_MAGIC)
+    {
+        ret = -E_INVAL_ELF;
+        goto bad_elf_cleanup_pgdir;
+    }
+    //(3.2) read raw data content in file and resolve proghdr based on info in elfhdr
+    struct proghdr __ph, *ph = &__ph;
+    uint32_t vm_flags, perm, phnum;
+    for(phnum = 0; phnum < elf->e_phnum; phnum++)
+    {
+        off_t phoff = elf->e_phoff + sizeof(struct proghdr) * phnum;
+        if((ret = load_icode_read(fd, ph, sizeof(struct proghdr), phoff)) != 0)
+        {
+            goto bad_cleanup_mmap;
+        }
+        if(ph->p_type != ELF_PT_LOAD)
+        {
+            continue;
+        }
+        if(ph->p_filesz > ph->p_memsz)
+        {
+            ret = -E_INVAL_ELF;
+            goto bad_cleanup_mmap;
+        }
+        if(ph->p_filesz == 0)
+        {
+            continue;
+        }
+        //(3.3) call mm_map to build vma related to TEXT/DATA
+        vm_flags = 0, perm = PTE_U;
+        if(ph->p_flags & ELF_PF_X)
+        {
+            vm_flags |= VM_EXEC;
+        }
+        if(ph->p_flags & ELF_PF_W)
+        {
+            vm_flags |= VM_WRITE;
+        }
+        if(ph->p_flags & ELF_PF_R)
+        {
+            vm_flags |= VM_READ;
+        }
+        if(vm_flags & VM_WRITE)
+        {
+            perm |= PTE_W;
+        }
+        if((ret = mm_map(mm, ph->p_va, ph->p_memsz, vm_flags, NULL)) != 0)
+        {
+            goto bad_cleanup_mmap;
+        }
+        //(3.4) callpgdir_alloc_page to allocate page for TEXT/DATA, read contents in file
+        //      and copy them into the new allocated pages
+        off_t offset = ph->p_offset;
+        size_t off, size;
+        uintptr_t start = ph->p_va, end, la = ROUNDDOWN(start, PGSIZE);
+
+        ret = -E_NO_MEM;
+
+        end = ph->p_va + ph->p_filesz;
+        while(start < end)
+        {
+            if((page = pgdir_alloc_page(mm->pgdir, la, perm)) == NULL)
+            {
+                ret = -E_NO_MEM;
+                goto bad_cleanup_mmap;
+            }
+            off = start - la, size = PGSIZE - off, la += PGSIZE;
+            if(end < la)
+            {
+                size -= la - end;
+            }
+            if((ret = load_icode_read(fd, page2kva(page) + off, size, offset)) != 0)
+            {
+                goto bad_cleanup_mmap;
+            }
+            start += size;
+            offset += size;
+        }
+        //(3.5) callpgdir_alloc_page to allocate pages for BSS, memset zero in these pages
+        end = ph->p_va + ph->p_memsz;
+        if(start < la)
+        {
+            if(start == end)
+            {
+                continue ;
+            }
+            off = start + PGSIZE - la;
+            size = PGSIZE - off;
+            if(end < la)
+            {
+                size -= la - end;
+            }
+            memset(page2kva(page) + off, 0, size);
+            start += size;
+            assert((end < la && start == end) || (end >= la && start == la));
+        }
+        while(start < end)
+        {
+            if((page = pgdir_alloc_page(mm->pgdir, la, perm)) == NULL)
+            {
+                ret = -E_NO_MEM;
+                goto bad_cleanup_mmap;
+            }
+            off = start - la, size = PGSIZE - off, la += PGSIZE;
+            if(end < la)
+            {
+                size -= la - end;
+            }
+            memset(page2kva(page) + off, 0, size);
+            start += size;
+        }
+    }
+    sysfile_close(fd);
+
+    //(4) call mm_map to setup user stack, and put parameters into user stack
+    vm_flags = VM_READ | VM_WRITE | VM_STACK;
+    if ((ret = mm_map(mm, USTACKTOP - USTACKSIZE, USTACKSIZE, vm_flags, NULL)) != 0)
+    {
+        goto bad_cleanup_mmap;
+    }
+    assert(pgdir_alloc_page(mm->pgdir, USTACKTOP-PGSIZE , PTE_USER) != NULL);
+    assert(pgdir_alloc_page(mm->pgdir, USTACKTOP-2*PGSIZE , PTE_USER) != NULL);
+    assert(pgdir_alloc_page(mm->pgdir, USTACKTOP-3*PGSIZE , PTE_USER) != NULL);
+    assert(pgdir_alloc_page(mm->pgdir, USTACKTOP-4*PGSIZE , PTE_USER) != NULL);
+
+    //(5) setup current process's mm, cr3, reset pgidr (using lcr3 MARCO)
+    mm_count_inc(mm);
+    current->mm = mm;
+    current->cr3 = PADDR(mm->pgdir);
+    lcr3(PADDR(mm->pgdir));
+
+    //(6) setup uargc and uargv in user stacks
+    uint32_t argv_size=0, i;
+    for(i = 0; i < argc; i ++)
+    {
+        argv_size += strnlen(kargv[i],EXEC_MAX_ARG_LEN + 1)+1;
+    }
+
+    uintptr_t stacktop = USTACKTOP - (argv_size/sizeof(long)+1)*sizeof(long);
+    char** uargv=(char **)(stacktop  - argc * sizeof(char *));
+
+    argv_size = 0;
+    for(i = 0; i < argc; i ++)
+    {
+        uargv[i] = strcpy((char *)(stacktop + argv_size ), kargv[i]);
+        argv_size +=  strnlen(kargv[i],EXEC_MAX_ARG_LEN + 1)+1;
+    }
+
+    stacktop = (uintptr_t)uargv - sizeof(int);
+    *(int *)stacktop = argc;
+
+    //(7) setup trapframe for user environment
+    struct trapframe *tf = current->tf;
+    memset(tf, 0, sizeof(struct trapframe));
+    /* LAB5:EXERCISE1 2012011275
+     * should set tf_cs,tf_ds,tf_es,tf_ss,tf_esp,tf_eip,tf_eflags
+     * NOTICE: If we set trapframe correctly, then the user level process can return to USER MODE from kernel. So
+     *          tf_cs should be USER_CS segment (see memlayout.h)
+     *          tf_ds=tf_es=tf_ss should be USER_DS segment
+     *          tf_esp should be the top addr of user stack (USTACKTOP)
+     *          tf_eip should be the entry point of this binary program (elf->e_entry)
+     *          tf_eflags should be set to enable computer to produce Interrupt
+     */
+    tf->tf_cs = USER_CS;
+    tf->tf_ds = tf->tf_es = tf->tf_ss = USER_DS;
+    tf->tf_esp = stacktop;
+    tf->tf_eip = elf->e_entry;
+    tf->tf_eflags = FL_IF;
+    ret = 0;
+
+    //(8) if up steps failed, you should cleanup the env.
+out:
+    return ret;
+bad_cleanup_mmap:
+    exit_mmap(mm);
+bad_elf_cleanup_pgdir:
+    put_pgdir(mm);
+bad_pgdir_cleanup_mm:
+    mm_destroy(mm);
+bad_mm:
+    goto out;
 }
 
 // this function isn't very correct in LAB8
@@ -621,12 +889,12 @@ do_execve(const char *name, int argc, const char **argv) {
 
     char local_name[PROC_NAME_LEN + 1];
     memset(local_name, 0, sizeof(local_name));
-    
+
     char *kargv[EXEC_MAX_ARG_NUM];
     const char *path;
-    
+
     int ret = -E_INVAL;
-    
+
     lock_mm(mm);
     if (name == NULL) {
         snprintf(local_name, sizeof(local_name), "<null> %d", current->pid);
@@ -645,7 +913,7 @@ do_execve(const char *name, int argc, const char **argv) {
     unlock_mm(mm);
     files_closeall(current->filesp);
 
-    /* sysfile_open will check the first argument path, thus we have to use a user-space pointer, and argv[0] may be incorrect */    
+    /* sysfile_open will check the first argument path, thus we have to use a user-space pointer, and argv[0] may be incorrect */
     int fd;
     if ((ret = fd = sysfile_open(path, O_RDONLY)) < 0) {
         goto execve_exit;
@@ -812,7 +1080,7 @@ init_main(void *arg) {
     if ((ret = vfs_set_bootfs("disk0:")) != 0) {
         panic("set boot fs failed: %e.\n", ret);
     }
-    
+
     size_t nr_free_pages_store = nr_free_pages();
     size_t kernel_allocated_store = kallocated();
 
@@ -828,7 +1096,7 @@ init_main(void *arg) {
     }
 
     fs_cleanup();
-        
+
     cprintf("all user-mode processes have quit.\n");
     assert(initproc->cptr == NULL && initproc->yptr == NULL && initproc->optr == NULL);
     assert(nr_process == 2);
@@ -839,7 +1107,7 @@ init_main(void *arg) {
     return 0;
 }
 
-// proc_init - set up the first kernel thread idleproc "idle" by itself and 
+// proc_init - set up the first kernel thread idleproc "idle" by itself and
 //           - create the second kernel thread init_main
 void
 proc_init(void) {
@@ -858,12 +1126,12 @@ proc_init(void) {
     idleproc->state = PROC_RUNNABLE;
     idleproc->kstack = (uintptr_t)bootstack;
     idleproc->need_resched = 1;
-    
+
     if ((idleproc->filesp = files_create()) == NULL) {
         panic("create filesp (idleproc) failed.\n");
     }
     files_count_inc(idleproc->filesp);
-    
+
     set_proc_name(idleproc, "idle");
     nr_process ++;
 
@@ -891,7 +1159,7 @@ cpu_idle(void) {
     }
 }
 
-//FOR LAB6, set the process's priority (bigger value will get more CPU time) 
+//FOR LAB6, set the process's priority (bigger value will get more CPU time)
 void
 lab6_set_priority(uint32_t priority)
 {
